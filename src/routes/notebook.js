@@ -27,12 +27,13 @@ router.get('/', auth, async (req, res) => {
 
 router.post('/', auth, async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, deadline } = req.body;
 
     const notebook = await prisma.notebook.create({
       data: {
         title,
         description,
+        deadline: deadline ? new Date(deadline) : null,
         userId: req.user.id,
       },
     });
@@ -46,7 +47,7 @@ router.post('/', auth, async (req, res) => {
 router.patch('/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description } = req.body;
+    const { title, description, deadline } = req.body;
 
     const notebook = await prisma.notebook.update({
       where: {
@@ -56,6 +57,7 @@ router.patch('/:id', auth, async (req, res) => {
       data: {
         title,
         description,
+        deadline: deadline ? new Date(deadline) : null
       },
     });
 
