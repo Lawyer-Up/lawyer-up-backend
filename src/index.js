@@ -5,6 +5,7 @@ const { PrismaClient } = require('@prisma/client');
 const userRoutes = require('./routes/users');
 const notebookRoutes = require('./routes/notebooks');
 const sourceRoutes = require('./routes/sources');
+const caseBriefRoutes = require('./routes/caseBrief');
 
 dotenv.config();
 
@@ -18,6 +19,7 @@ app.use(express.json());
 app.use('/api/users', userRoutes);
 app.use('/api/notebooks', notebookRoutes);
 app.use('/api/sources', sourceRoutes);
+app.use('/api/case-briefs', caseBriefRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
@@ -25,4 +27,4 @@ app.get('/health', (req, res) => {
 
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
-}); 
+});
