@@ -9,11 +9,9 @@ import multer from "multer";
 import path from "path";
 import { fileURLToPath } from "url";
 import fs from "fs";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const anthropic = new Anthropic({
-  apiKey: process.env.CLAUDE_API_KEY, // Ensure this is in your .env
-});
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
 // Schema for document generation
 const documentGenerationSchema = z.object({
@@ -354,8 +352,8 @@ app.post(
       const prompt = createCIBCPrompt(caseData);
 
       // Call Claude API
-      const response = await anthropic.messages.create({
-        model: "claude-3-haiku-20240307",
+      const response = await genAI.messages.create({
+        model: "gemini-3-20240307",
         max_tokens: 2000,
         temperature: 0.2,
         system:
@@ -513,8 +511,8 @@ app.post(
       ];
 
       // Call Claude API
-      const response = await anthropic.messages.create({
-        model: "claude-3-sonnet-20240229",
+      const response = await genAI.messages.create({
+        model: "gemini-3-sonnet-20240229",
         max_tokens: 4000,
         temperature: 0.3,
         system: getSystemPrompt(params),
@@ -647,6 +645,90 @@ function isValidLegalDocument(content) {
   const requiredMarkers = ["Advocate Details", "Subject:", "Reference:"];
   return requiredMarkers.every((marker) => content.includes(marker));
 }
+
+// Argument generation schema
+const argumentGenerationSchema = z.object({
+  cibcId: z.string(),
+  argumentType: z.enum([
+    "OpeningStatement",
+    "ClosingArgument",
+    "MotionArgument",
+    "CrossExamination",
+    "AppealGrounds",
+  ]),
+  targetParty: z.string().optional(),
+  legalFocus: z.string().optional(),
+  customInstructions: z.string().optional(),
+});
+
+// Generate legal arguments from CIBC
+app.post("/api/cibc/generate-arguments", authenticate, async (req, res) => {
+  try {
+    const { cibcId, argumentType, targetParty, legalFocus, customInstructions } =
+      argumentGenerationSchema.parse(req.body);
+
+    // Get CIBC content from database
+    const cibc = await prisma.cIBC.findUnique({
+      where: { id: cibcId },
+      select: { content: true, workspaceId: true },
+    });
+
+    if (!cibc) {
+      return res.status(404).json({ error: "CIBC document not found" });
+    }
+
+    const sections = extractCIBCSections(cibc.content);
+
+    const prompt = `Generate strong legal arguments for ${argumentType} based on this CIBC analysis:
+    
+    **Case Overview**
+    ${sections["Case Overview"]?.join("\n") || "N/A"}
+    
+    **Key Facts**
+    ${sections["Factual Matrix"]?.join("\n") || "N/A"}
+    
+    **Legal Context**
+    ${sections["Legal Parameters"]?.join("\n") || "N/A"}
+    
+    Requirements:
+    - Argument type: ${argumentType}
+    ${targetParty ? `- Target party: ${targetParty}\n` : ''}
+    ${legalFocus ? `- Legal focus: ${legalFocus}\n` : ''}
+    ${customInstructions ? `- Custom instructions: ${customInstructions}\n` : ''}
+    - Cite relevant Indian legal provisions
+    - Include evidentiary references
+    - Structure arguments logically
+    - Highlight strongest points first`;
+
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const text = response.text();
+
+    // Save generated arguments to database
+    const argument = await prisma.argument.create({
+      data: {
+        workspaceId: cibc.workspaceId,
+        title: `${argumentType} Arguments`,
+        content: text
+      }
+    });
+
+    res.json({
+      id: argument.id,
+      arguments: argument.content,
+      cibcId,
+      workspaceId: cibc.workspaceId,
+      generatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error("Argument generation error:", error);
+    res.status(500).json({
+      error: "Failed to generate arguments",
+      details: error.message,
+    });
+  }
+});
 
 // Start server
 app.listen(PORT, () => {
