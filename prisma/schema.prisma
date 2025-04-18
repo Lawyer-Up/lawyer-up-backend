@@ -18,25 +18,29 @@ model User {
 }
 
 model Workspace {
-  id          String        @id @default(uuid())
+  id          String          @id @default(uuid())
   name        String
   description String?
   userId      String
-  user        User          @relation(fields: [userId], references: [id])
+  user        User            @relation(fields: [userId], references: [id])
   case        Case?
   documents   Document[]
   notes       Note[]
   timeline    TimelineEvent[]
   arguments   Argument[]
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  Research    Research[]
+  CIBC        CIBC[]
+
+  LegalDocument LegalDocument[]
 }
 
 model Case {
-  id          String      @id @default(uuid())
-  workspaceId String      @unique
-  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
-  
+  id          String    @id @default(uuid())
+  workspaceId String    @unique
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+
   // Client Information
   clientName       String?
   clientAge        Int?
@@ -46,71 +50,110 @@ model Case {
   clientAddress    String?
   firText          String?
   idProofUrl       String?
-  
+
   // Case Details
-  caseType         CaseType?
-  description      String?
-  factsDate        DateTime?
-  factsPlace       String?
-  factsWitnesses   String?
-  policeStation    String?
-  opposingParty    String?
-  previousCounsel  String?
-  
+  caseType        CaseType?
+  description     String?
+  factsDate       DateTime?
+  factsPlace      String?
+  factsWitnesses  String?
+  policeStation   String?
+  opposingParty   String?
+  previousCounsel String?
+
   // Documents
-  courtOrders      String[]  // Array of file URLs
-  supportingDocs   String[]  // Array of file URLs
-  legalHistory     String?
-  urgency          UrgencyLevel?
-  notes            String?
-  
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  courtOrders    String[] // Array of file URLs
+  supportingDocs String[] // Array of file URLs
+  legalHistory   String?
+  urgency        UrgencyLevel?
+  notes          String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
-
 model Document {
-  id          String      @id @default(uuid())
+  id          String       @id @default(uuid())
   workspaceId String
-  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id])
   title       String
   content     String?
   type        DocumentType
   fileUrl     String?
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 }
 
 model Note {
-  id          String      @id @default(uuid())
+  id          String    @id @default(uuid())
   workspaceId String
-  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
   title       String?
   content     String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model TimelineEvent {
-  id          String      @id @default(uuid())
+  id          String    @id @default(uuid())
   workspaceId String
-  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
   title       String
   description String?
   date        DateTime
-  completed   Boolean     @default(false)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 model Argument {
-  id          String      @id @default(uuid())
+  id          String    @id @default(uuid())
   workspaceId String
-  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
   title       String
   content     String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Research {
+  id          String    @id @default(uuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id])
+  title       String?
+  content     String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+// CIBC has the output of research, and initial case info
+model CIBC {
+  id            String          @id @default(uuid())
+  workspaceId   String
+  workspace     Workspace       @relation(fields: [workspaceId], references: [id])
+  title         String?
+  content       String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  LegalDocument LegalDocument[]
+}
+
+model LegalDocument {
+  id                 String   @id @default(uuid())
+  workspaceId        String
+  cibcId             String? // Optional link to CIBC analysis
+  title              String?
+  type               String? // Notice, Email, Reply, etc.
+  recipient          String?
+  jurisdiction       String?
+  tone               String? // Formal, Assertive, Conciliatory
+  customInstructions String?
+  content            String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  cibc      CIBC?     @relation(fields: [cibcId], references: [id])
 }
 
 enum CaseType {
