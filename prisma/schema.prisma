@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String      @id @default(uuid())
+  email      String      @unique
+  password   String
+  name       String?
+  workspaces Workspace[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Workspace {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  case        Case?
+  documents   Document[]
+  notes       Note[]
+  timeline    TimelineEvent[]
+  arguments   Argument[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model Case {
+  id          String      @id @default(uuid())
+  workspaceId String      @unique
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  
+  // Client Information
+  clientName       String?
+  clientAge        Int?
+  clientContact    String?
+  clientEmail      String?
+  clientOccupation String?
+  clientAddress    String?
+  firText          String?
+  idProofUrl       String?
+  
+  // Case Details
+  caseType         CaseType?
+  description      String?
+  factsDate        DateTime?
+  factsPlace       String?
+  factsWitnesses   String?
+  policeStation    String?
+  opposingParty    String?
+  previousCounsel  String?
+  
+  // Documents
+  courtOrders      String[]  // Array of file URLs
+  supportingDocs   String[]  // Array of file URLs
+  legalHistory     String?
+  urgency          UrgencyLevel?
+  notes            String?
+  
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+
+model Document {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  title       String
+  content     String?
+  type        DocumentType
+  fileUrl     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Note {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  title       String?
+  content     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model TimelineEvent {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  title       String
+  description String?
+  date        DateTime
+  completed   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Argument {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  title       String
+  content     String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum CaseType {
+  CRIMINAL
+  CIVIL
+  FAMILY_LAW
+  PROPERTY_DISPUTE
+  CORPORATE
+  CONSUMER_PROTECTION
+  LABOR_LAW
+  TAX_DISPUTE
+  INTELLECTUAL_PROPERTY
+  OTHER
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum DocumentType {
+  BRIEF
+  MOTION
+  PLEADING
+  MEMORANDUM
+  COURT_ORDER
+  SUPPORTING_DOC
+  CLIENT_DOCUMENT
+  OTHER
+}
