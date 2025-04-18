@@ -142,7 +142,6 @@ app.get("/api/workspaces", authenticate, async (req, res) => {
 
 app.post("/api/workspaces", authenticate, async (req, res) => {
   try {
-    // Let Prisma automatically handle ID generation
     const workspace = await prisma.workspace.create({
       data: {
         name: req.body.name || "New Workspace",
@@ -217,7 +216,6 @@ app.put("/api/cases/:caseId", authenticate, async (req, res) => {
   }
 });
 
-// Document Routes
 app.post(
   "/api/workspaces/:workspaceId/documents",
   authenticate,
@@ -244,7 +242,6 @@ app.post(
   }
 );
 
-// Note Routes
 app.post(
   "/api/workspaces/:workspaceId/notes",
   authenticate,
