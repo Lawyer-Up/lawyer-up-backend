@@ -13,3 +13,132 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+model User {
+  id         String      @id @default(uuid())
+  email      String      @unique
+  name       String?
+  workspaces Workspace[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+}
+
+model Workspace {
+  id          String        @id @default(uuid())
+  name        String
+  description String?
+  userId      String
+  user        User          @relation(fields: [userId], references: [id])
+  caseContext CaseContext[]
+  sources     Source[]
+  generatedFiles GeneratedFile[]
+  notes       Note[]
+  timeline    TimelineEvent[]
+  arguments   Argument[]
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model CaseContext {
+  id               String        @id @default(uuid())
+  workspaceId      String
+  workspace        Workspace     @relation(fields: [workspaceId], references: [id])
+  clientName       String?
+  clientAge        Int?
+  clientContact    String?
+  clientEmail      String?
+  clientOccupation String?
+  clientAddress    String?
+  firText          String?
+  caseType         CaseType?
+  description      String?
+  incidentDate     DateTime?
+  witnesses        String?
+  location         String?
+  policeStation    String?
+  opposingParty    String?
+  urgency          UrgencyLevel?
+  courtOrders      String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model Source {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  title       String?
+  content     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model GeneratedFile {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  title       String?
+  content     String?
+  type        FileType?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Note {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  content     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model TimelineEvent {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  date        DateTime?
+  title       String?
+  description String?
+  completed   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Argument {
+  id          String      @id @default(uuid())
+  workspaceId String
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id])
+  title       String?
+  content     String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+enum CaseType {
+  CRIMINAL
+  CIVIL
+  FAMILY_LAW
+  PROPERTY_DISPUTE
+  CORPORATE
+  CONSUMER_PROTECTION
+  LABOR_LAW
+  TAX_DISPUTE
+  INTELLECTUAL_PROPERTY
+  OTHER
+}
+
+enum UrgencyLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum FileType {
+  BRIEF
+  MOTION
+  PLEADING
+  MEMORANDUM
+  OTHER
+}

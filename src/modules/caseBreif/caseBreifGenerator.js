@@ -77,7 +77,7 @@ Parse the following case information, and return a formatted, synthesized **Case
 
 
 
-## OUTPUT FORMAT: 🧠 CASE INTELLIGENCE BRIEF
+## OUTPUT FORMAT: CASE INTELLIGENCE BRIEF
 
 
 
