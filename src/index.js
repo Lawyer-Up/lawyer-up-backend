@@ -260,6 +260,58 @@ app.post(
   }
 );
 
+app.delete(
+  "/api/workspaces/:workspaceId/notes",
+  authenticate,
+  async (req, res) => {
+    try {
+      const note = await prisma.note.create({
+        data: {
+          workspaceId: req.params.workspaceId,
+          title: req.body.title || "New Note",
+          content: req.body.content,
+        },
+      });
+      res.json(note);
+    } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: "Failed to create note" });
+    }
+  }
+);
+
+app.delete("/api/workspaces/:workspaceId/notes/:noteId", authenticate, async (req, res) => {
+  const { workspaceId, noteId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+
+    if (!workspace) {
+      return res.status(404).json({ error: "Workspace not found" });
+    }
+    const note = await prisma.note.findUnique({
+      where: { id: noteId },
+    });
+
+    if (!note) {
+      return res.status(404).json({ error: "Note not found" });
+    }
+
+    await prisma.note.delete({
+      where: { id: noteId },
+    });
+
+    res.json({ message: "Note deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting note:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+
 // Timeline Event Routes
 app.post(
   "/api/workspaces/:workspaceId/timeline",
@@ -283,7 +335,38 @@ app.post(
   }
 );
 
-// Argument Routes
+app.put("/api/workspaces/:workspaceId/timeline/:eventId", authenticate, async (req, res) => {
+  const { workspaceId, eventId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    const event = await prisma.timelineEvent.findUnique({
+      where: { id: eventId },
+    });
+
+    if (!event || event.workspaceId !== workspaceId) {
+      return res.status(404).json({ error: "Timeline event not found" });
+    }
+
+    const workspace = await prisma.workspace.findUnique({
+      where: { id: workspaceId },
+    });
+
+    if (!workspace || workspace.userId !== userId) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
+
+    await prisma.timelineEvent.delete({
+      where: { id: eventId },
+    });
+
+    res.json({ message: "Timeline event deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting timeline event:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.post(
   "/api/workspaces/:workspaceId/arguments",
   authenticate,
