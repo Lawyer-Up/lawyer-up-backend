@@ -330,7 +330,7 @@ app.post(
   }
 );
 
-// CIBC Generation Endpoint
+// CIBC Generation Endpoint - Updated for Gemini
 app.post(
   "/api/workspaces/:workspaceId/cibc",
   authenticate,
@@ -347,27 +347,24 @@ app.post(
         return res.status(404).json({ error: "Case data not found" });
       }
 
-      // Prepare case data for Claude
+      // Prepare case data for Gemini
       const caseData = workspace.case;
       const prompt = createCIBCPrompt(caseData);
 
-      // Call Claude API
-      const response = await genAI.messages.create({
-        model: "gemini-3-20240307",
-        max_tokens: 2000,
-        temperature: 0.2,
-        system:
-          "You are a senior Indian legal analyst. Generate comprehensive CIBC documents from case data.",
-        messages: [{ role: "user", content: prompt }],
-      });
-
-      const cibcContent = response.content[0].text;
+      // Initialize the Gemini model
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      
+      // Generate content
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const cibcContent = response.text();
+      console.log(cibcContent)
 
       // Validate and save
       if (!isValidCIBC(cibcContent)) {
         throw new Error("Invalid CIBC generated");
       }
-
+      console.log(prisma)
       const cibcEntry = await prisma.CIBC.create({
         data: {
           workspaceId,
@@ -378,8 +375,11 @@ app.post(
 
       res.json(cibcEntry);
     } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: "Failed to generate CIBC" });
+      console.error("CIBC generation error:", error);
+      res.status(500).json({ 
+        error: "Failed to generate CIBC",
+        details: error.message 
+      });
     }
   }
 );
@@ -488,39 +488,33 @@ app.post(
       // Get CIBC context
       const cibcData = params.cibcId
         ? await prisma.cIBC.findFirst({
-            where: {
-              id: params.cibcId,
-              workspaceId,
-            },
+            where: { id: params.cibcId, workspaceId }
           })
         : await prisma.cIBC.findFirst({
             where: { workspaceId },
-            orderBy: { createdAt: "desc" },
+            orderBy: { createdAt: "desc" }
           });
 
       if (!cibcData) {
         return res.status(400).json({ error: "No CIBC data found" });
       }
 
-      // Construct Claude prompt
-      const messages = [
-        {
-          role: "user",
-          content: generateDocumentPrompt(cibcData.content, params),
-        },
-      ];
+      // Construct prompt
+      const prompt = generateDocumentPrompt(cibcData.content, params);
+      const systemPrompt = getSystemPrompt(params);
 
-      // Call Claude API
-      const response = await genAI.messages.create({
-        model: "gemini-3-sonnet-20240229",
-        max_tokens: 4000,
-        temperature: 0.3,
-        system: getSystemPrompt(params),
-        messages,
+      // Initialize the model
+      const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        systemInstruction: systemPrompt
       });
+      
+      // Generate content
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const generatedContent = response.text();
 
-      // Validate and process response
-      const generatedContent = response.content[0].text;
+      // Validate response
       if (!isValidLegalDocument(generatedContent)) {
         throw new Error("Invalid document generated");
       }
@@ -552,7 +546,6 @@ app.post(
     }
   }
 );
-
 // Helper functions
 function getSystemPrompt(params) {
   return `You are a senior Indian legal draftsman. Strictly follow these rules:
@@ -661,13 +654,12 @@ const argumentGenerationSchema = z.object({
   customInstructions: z.string().optional(),
 });
 
-// Generate legal arguments from CIBC
 app.post("/api/cibc/generate-arguments", authenticate, async (req, res) => {
   try {
     const { cibcId, argumentType, targetParty, legalFocus, customInstructions } =
       argumentGenerationSchema.parse(req.body);
 
-    // Get CIBC content from database
+    // Get CIBC content
     const cibc = await prisma.cIBC.findUnique({
       where: { id: cibcId },
       select: { content: true, workspaceId: true },
@@ -700,12 +692,12 @@ app.post("/api/cibc/generate-arguments", authenticate, async (req, res) => {
     - Structure arguments logically
     - Highlight strongest points first`;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     const result = await model.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
 
-    // Save generated arguments to database
+    // Save to database
     const argument = await prisma.argument.create({
       data: {
         workspaceId: cibc.workspaceId,
@@ -729,7 +721,6 @@ app.post("/api/cibc/generate-arguments", authenticate, async (req, res) => {
     });
   }
 });
-
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
