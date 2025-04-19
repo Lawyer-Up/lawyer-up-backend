@@ -29,6 +29,18 @@ const documentGenerationSchema = z.object({
   cibcId: z.string().optional(),
 });
 
+const documentTemplateSchema = z.object({
+  templateName: z.enum([
+    "Bail",
+    "ClientIntakeForm",
+    "CivilSuit",
+    "WritPetition",
+    "PowerOfAttorney"
+  ]),
+  workspaceId: z.string(),
+  customInstructions: z.string().optional()
+});
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -135,6 +147,62 @@ app.get("/api/workspaces", authenticate, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: "Failed to fetch workspaces" });
+  }
+});
+
+app.get("/api/workspaces/:workspaceId/notes", authenticate, async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+
+    const notes = await prisma.note.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    res.json(notes);
+  } catch (error) {
+    console.error("Error fetching notes:", error);
+    res.status(500).json({ error: "Failed to fetch notes" });
+  }
+});
+
+app.get("/api/workspaces/:workspaceId/timeline", authenticate, async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+
+    const events = await prisma.timelineEvent.findMany({
+      where: { workspaceId },
+      orderBy: { date: "asc" },
+    });
+
+    res.json(events);
+  } catch (error) {
+    console.error("Error fetching timeline events:", error);
+    res.status(500).json({ error: "Failed to fetch timeline events" });
+  }
+});
+
+
+app.get("/api/workspaces/:workspaceId/cibc", authenticate, async (req, res) => {
+  try {
+    const { workspaceId } = req.params;
+
+    const cibcDocuments = await prisma.cIBC.findMany({
+      where: { workspaceId },
+      orderBy: { createdAt: "desc" }, // Optional: order by most recent
+      select: {
+        id: true,
+        title: true,
+        content: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    res.json(cibcDocuments);
+  } catch (error) {
+    console.error("Error fetching CIBC documents:", error);
+    res.status(500).json({ error: "Failed to fetch CIBC documents" });
   }
 });
 
@@ -335,6 +403,29 @@ app.post(
   }
 );
 
+// In your backend API (already exists in your code)
+app.get("/api/workspaces/:workspaceId/case", authenticate, async (req, res) => {
+  try {
+    const caseData = await prisma.case.findFirst({
+      where: {
+        workspaceId: req.params.workspaceId,
+        workspace: {
+          userId: req.user.id,
+        },
+      },
+    });
+
+    if (!caseData) {
+      return res.status(404).json({ error: "Case not found" });
+    }
+
+    res.json(caseData);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch case data" });
+  }
+});
+
 app.put("/api/workspaces/:workspaceId/timeline/:eventId", authenticate, async (req, res) => {
   const { workspaceId, eventId } = req.params;
   const userId = req.user.id;
@@ -387,14 +478,11 @@ app.post(
   }
 );
 
-// AI Argument Generation
 app.post(
   "/api/workspaces/:workspaceId/generate-arguments",
   authenticate,
   async (req, res) => {
     try {
-      // In a real implementation, this would call an AI service
-      // For now, we return mock data
       const mockArguments = [
         "Establish duty of care between the parties based on contractual relationship",
         "Demonstrate breach of duty through documented communications",
@@ -402,7 +490,6 @@ app.post(
         "Quantify damages using financial statements and expert testimony",
       ];
 
-      // Simulate processing delay
       await new Promise((resolve) => setTimeout(resolve, 1500));
 
       res.json({ arguments: mockArguments });
@@ -512,31 +599,6 @@ const isValidCIBC = (content) => {
   ];
   return requiredSections.every((section) => content.includes(section));
 };
-
-// // Generate legal strategy based on case data
-// const generateLegalStrategy = (caseData) => {
-//   const strategies = [];
-
-//   if (caseData.factsWitnesses) {
-//     strategies.push(
-//       `- Witness testimony from ${caseData.factsWitnesses} should be prioritized`
-//     );
-//   }
-
-//   if (caseData.urgency?.toLowerCase().includes("bail")) {
-//     strategies.push("- Immediate bail application under CrPC Section 439");
-//   }
-
-//   if (caseData.caseType?.toLowerCase().includes("property")) {
-//     strategies.push(
-//       "- Consider injunction application under CPC Order 39 Rule 1"
-//     );
-//   }
-
-//   return strategies.length > 0
-//     ? strategies.join("\n   ")
-//     : "Case strategy requires further analysis";
-// };
 
 app.get("/api/workspaces/:workspaceId/cibc", authenticate, async (req, res) => {
   try {
@@ -804,6 +866,120 @@ app.post("/api/cibc/generate-arguments", authenticate, async (req, res) => {
     });
   }
 });
+
+app.post(
+  "/api/workspaces/:workspaceId/generate-standard-document",
+  authenticate,
+  async (req, res) => {
+    try {
+      const { templateName, customInstructions } = documentTemplateSchema.parse(req.body);
+      const { workspaceId } = req.params;
+
+      // Get case data
+      const caseData = await prisma.case.findFirst({
+        where: { workspaceId },
+        include: { workspace: true }
+      });
+
+      if (!caseData) {
+        return res.status(404).json({ error: "Case data not found" });
+      }
+
+      // Get latest CIBC if available
+      const cibc = await prisma.cIBC.findFirst({
+        where: { workspaceId },
+        orderBy: { createdAt: "desc" }
+      });
+
+      // Generate document using Gemini
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      
+      const prompt = createDocumentPrompt(templateName, caseData, cibc?.content, customInstructions);
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      const generatedContent = response.text();
+
+      // Save the generated document
+      const document = await prisma.legalDocument.create({
+        data: {
+          workspaceId,
+          title: `${templateName}_${new Date().toISOString().slice(0, 10)}`,
+          type: templateName,
+          content: generatedContent,
+          isStandardDocument: true
+        }
+      });
+
+      res.json(document);
+    } catch (error) {
+      console.error("Document generation error:", error);
+      res.status(500).json({
+        error: "Document generation failed",
+        details: error.message
+      });
+    }
+  }
+);
+
+// Helper function to create document prompts
+function createDocumentPrompt(templateName, caseData, cibcContent, customInstructions) {
+  const templates = {
+    Bail: `Generate a comprehensive Bail Application document for Indian courts based on:
+    
+    **Client Information**
+    - Name: ${caseData.clientName}
+    - Age: ${caseData.clientAge || 'Not specified'}
+    - Address: ${caseData.clientAddress || 'Not specified'}
+    
+    **Case Details**
+    - FIR Details: ${caseData.firText || 'Not available'}
+    - Police Station: ${caseData.policeStation || 'Not specified'}
+    - Sections: ${caseData.applicableSections || 'To be confirmed'}
+    
+    **Additional Context**
+    ${cibcContent ? `CIBC Analysis:\n${cibcContent}\n` : ''}
+    ${customInstructions ? `Custom Instructions:\n${customInstructions}\n` : ''}
+    
+    Required Structure:
+    1. Court name and case number (if available)
+    2. Applicant details
+    3. Brief facts of the case
+    4. Grounds for bail with legal citations
+    5. Undertakings by applicant
+    6. Prayer for relief
+    
+    Follow Indian legal format and cite relevant CrPC sections.`,
+
+    ClientIntakeForm: `Generate a detailed Client Intake Form template with:
+    
+    **Client Information Section**
+    - Personal details (name, age, contact, address)
+    - Identification documents
+    - Occupation and income details
+    
+    **Case Information Section**
+    - Case type dropdown
+    - Opposing party details
+    - Previous legal history
+    
+    **Document Checklist**
+    - Required documents for this case type
+    - Space for client to mark availability
+    
+    **Declaration Section**
+    - Client verification statements
+    - Data privacy acknowledgement
+    
+    Make it professional yet client-friendly.`,
+
+    CivilSuit: `Generate a Civil Suit draft for ${caseData.caseType || 'the case'}...`,
+    WritPetition: `Generate a Writ Petition under Article 226 of Indian Constitution...`,
+    PowerOfAttorney: `Generate a Power of Attorney document for ${caseData.clientName}...`
+  };
+
+  return templates[templateName];
+}
+
 // Start server
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
